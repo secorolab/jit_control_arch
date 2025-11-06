@@ -14,7 +14,6 @@
 
 #include "rclcpp/rclcpp.hpp"
 
-
 using namespace llvm;
 using namespace llvm::orc;
 
@@ -22,9 +21,9 @@ class LLVMJITNode : public rclcpp::Node {
 public:
   LLVMJITNode();
 
-private:
+  void load_ir(const char *ir_code, LLJIT &JIT);
+
   void test();
-  void test2();
 };
 
 #endif  // JIT_CONTROL_ARCH_JIT_NODE_HPP
