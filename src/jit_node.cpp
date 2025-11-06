@@ -1,4 +1,7 @@
 #include <jit_control_arch/jit_node.hpp>
+#include <llvm/ExecutionEngine/Orc/Mangling.h>
+#include <llvm/ExecutionEngine/Orc/SymbolStringPool.h>
+
 #include <ament_index_cpp/get_package_prefix.hpp>
 
 #include <memory>
@@ -93,6 +96,8 @@ void LLVMJITNode::load_ir(const char *ir_code, LLJIT &JIT) {
 
     cantFail(JIT.addIRModule(ThreadSafeModule(std::move(M), std::move(Context))));
 }
+
+
 
 void LLVMJITNode::test() {
     InitializeNativeTarget();
@@ -233,6 +238,22 @@ void LLVMJITNode::test() {
             }
         } catch (const std::exception &e) {
             RCLCPP_ERROR(get_logger(), "Error calling function %s: %s", controller.name.c_str(), e.what());
+        }
+
+        // delete the symbol from JIT to avoid conflicts in next iteration
+        auto &JD = JIT->getMainJITDylib();
+        llvm::orc::MangleAndInterner Mangle(JIT->getExecutionSession(), JIT->getDataLayout());
+
+        // use it like a callable
+        llvm::orc::SymbolNameSet toRemove = { Mangle(controller.name) };
+
+        // remove the symbol
+        if (auto err = JD.remove(toRemove)) {
+            llvm::errs() << "Failed to remove symbol: " << controller.name << "\n";
+            llvm::logAllUnhandledErrors(std::move(err), llvm::errs(), "Error: ");
+            RCLCPP_ERROR(get_logger(), "Failed to remove symbol: %s", controller.name.c_str());
+        } else {
+            RCLCPP_INFO(get_logger(), "Removed symbol: %s", controller.name.c_str());
         }
     }
 }
