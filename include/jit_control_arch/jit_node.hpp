@@ -23,7 +23,11 @@ public:
 
   void load_ir(const char *ir_code, LLJIT &JIT);
 
-  void test();
+  void testDL();
+  void testJIT();
+
+  void testDLMul();
+  void testJITMul();
 };
 
 #endif  // JIT_CONTROL_ARCH_JIT_NODE_HPP
