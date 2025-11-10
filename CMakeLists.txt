@@ -33,7 +33,7 @@ ament_export_targets(controllers HAS_LIBRARY_TARGET)
 
 add_executable(jit_node src/jit_node.cpp)
 llvm_map_components_to_libnames(llvm_libs support core orcjit native irreader)
-target_link_libraries(jit_node ${llvm_libs} controllers ffi)
+target_link_libraries(jit_node ${llvm_libs} ffi)
 target_include_directories(jit_node PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include/${PROJECT_NAME}>)

@@ -58,6 +58,12 @@ void LLVMJITNode::load_ir(const char *ir_code, LLJIT &JIT) {
       return;
     }
 
+    // check for error after parsing
+    if (Err.getMessage().size() > 0) {
+        RCLCPP_ERROR(get_logger(), "Error parsing IR: %s", Err.getMessage().str().c_str());
+        return;
+    }
+
     cantFail(JIT.addIRModule(ThreadSafeModule(std::move(M), std::move(Context))));
 }
 
@@ -89,7 +95,7 @@ void LLVMJITNode::testDL() {
 
     struct DLFuncData {
         std::string fName;
-        std::string libPath;
+        std::string lib;
         std::string returnType;
         std::vector<std::string> argTypes;
         std::vector<void*> argValues;
@@ -110,7 +116,7 @@ void LLVMJITNode::testDL() {
     // Load external controllers library
     const auto pkg = "jit_control_arch";
     const auto prefix = ament_index_cpp::get_package_prefix(pkg) + "/lib/";
-    const auto lib_controllers_path = prefix + "libcontrollers.so";
+    const auto lib_controllers_path = prefix + dl_func.lib;
 
     void* handle = dlopen(lib_controllers_path.c_str(), RTLD_LAZY);
     if (!handle) {
@@ -258,10 +264,19 @@ void LLVMJITNode::testJIT() {
 
     // Load IR
     load_ir(jit_func.ir.c_str(), *JIT);
+    RCLCPP_INFO(get_logger(), "Loaded JIT IR.");
 
     // Lookup function
-    auto Sym = cantFail(JIT->lookup(jit_func.fName));
-    void* fn_ptr = Sym.toPtr<void*>();
+    auto SymOrErr = JIT->lookup(jit_func.fName);
+    if (!SymOrErr) {
+        std::string msg;
+        llvm::handleAllErrors(SymOrErr.takeError(), [&](llvm::ErrorInfoBase &EIB) {
+            msg = EIB.message();
+        });
+        RCLCPP_ERROR(get_logger(), "Symbol lookup failed: %s", msg.c_str());
+        return;
+    }
+    auto fn_ptr = SymOrErr->toPtr<void*>();
     RCLCPP_INFO(get_logger(), "Located function: %s at %p", jit_func.fName.c_str(), fn_ptr);
 
     using FnType = void (*)(double*);
