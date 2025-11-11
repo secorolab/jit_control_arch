@@ -31,14 +31,14 @@ ament_target_dependencies(controllers)
 
 ament_export_targets(controllers HAS_LIBRARY_TARGET)
 
-add_executable(jit_node src/jit_node.cpp)
+add_executable(jit_test_node src/jit_test_node.cpp)
 llvm_map_components_to_libnames(llvm_libs support core orcjit native irreader)
-target_link_libraries(jit_node ${llvm_libs} ffi)
-target_include_directories(jit_node PUBLIC
+target_link_libraries(jit_test_node ${llvm_libs} ffi)
+target_include_directories(jit_test_node PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include/${PROJECT_NAME}>)
-target_compile_features(jit_node PUBLIC c_std_99 cxx_std_17)
-ament_target_dependencies(jit_node rclcpp ament_index_cpp)
+target_compile_features(jit_test_node PUBLIC c_std_99 cxx_std_17)
+ament_target_dependencies(jit_test_node rclcpp ament_index_cpp)
 
 install(TARGETS controllers
   EXPORT controllers
@@ -48,7 +48,7 @@ install(TARGETS controllers
   INCLUDES DESTINATION include/${PROJECT_NAME}
 )
 
-install(TARGETS jit_node
+install(TARGETS jit_test_node
   DESTINATION lib/${PROJECT_NAME}
 )
 

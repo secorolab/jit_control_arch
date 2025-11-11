@@ -1,17 +1,29 @@
-#include <jit_control_arch/jit_node.hpp>
-
 #include <dlfcn.h>
 #include <ffi.h>
 
+#include "llvm/ExecutionEngine/Orc/LLJIT.h"
+#include "llvm/ExecutionEngine/Orc/ThreadSafeModule.h"
+#include "llvm/IRReader/IRReader.h"
+#include "llvm/Support/SourceMgr.h"
+#include "llvm/IR/LLVMContext.h"
+#include "llvm/IR/Module.h"
+#include "llvm/Support/TargetSelect.h"
+#include "llvm/Support/raw_ostream.h"
+#include "llvm/Support/MemoryBuffer.h"
 #include <llvm/ExecutionEngine/Orc/Mangling.h>
 #include <llvm/ExecutionEngine/Orc/SymbolStringPool.h>
-
-#include <ament_index_cpp/get_package_prefix.hpp>
 
 #include <memory>
 #include <vector>
 #include <string>
-#include <any>
+
+#include "rclcpp/node.hpp"
+
+#include <ament_index_cpp/get_package_prefix.hpp>
+
+
+using namespace llvm;
+using namespace llvm::orc;
 
 
 struct FuncReturn {
@@ -42,31 +54,6 @@ ffi_type* mapType(const std::string& t) {
     throw std::runtime_error("Unsupported type: " + t);
 }
 
-LLVMJITNode::LLVMJITNode() : Node("llvm_jit_node") {
-    RCLCPP_INFO(get_logger(), "LLVM JIT Node started.");
-}
-
-void LLVMJITNode::load_ir(const char *ir_code, LLJIT &JIT) {
-    auto Context = std::make_unique<LLVMContext>();
-    SMDiagnostic Err;
-    auto Buffer = MemoryBuffer::getMemBuffer(ir_code);
-    auto M = parseIR(*Buffer, Err, *Context);
-
-    if (!M) {
-      Err.print("jit_ir_string", errs());
-      RCLCPP_ERROR(get_logger(), "Failed to parse IR");
-      return;
-    }
-
-    // check for error after parsing
-    if (Err.getMessage().size() > 0) {
-        RCLCPP_ERROR(get_logger(), "Error parsing IR: %s", Err.getMessage().str().c_str());
-        return;
-    }
-
-    cantFail(JIT.addIRModule(ThreadSafeModule(std::move(M), std::move(Context))));
-}
-
 void ffiCall(void* fn_ptr,
              const std::string& returnType,
              const std::vector<std::string>& argTypes,
@@ -91,8 +78,33 @@ void ffiCall(void* fn_ptr,
     ffi_call(&cif, FFI_FN(fn_ptr), retPtr, const_cast<void**>(argValues.data()));
 }
 
-void LLVMJITNode::testDL() {
 
+class LLVMJITNode : public rclcpp::Node {
+public:
+    LLVMJITNode() : Node("llvm_jit_node") {}
+
+void load_ir(const char *ir_code, LLJIT &JIT) {
+    auto Context = std::make_unique<LLVMContext>();
+    SMDiagnostic Err;
+    auto Buffer = MemoryBuffer::getMemBuffer(ir_code);
+    auto M = parseIR(*Buffer, Err, *Context);
+
+    if (!M) {
+      Err.print("jit_ir_string", errs());
+      RCLCPP_ERROR(get_logger(), "Failed to parse IR");
+      return;
+    }
+
+    // check for error after parsing
+    if (Err.getMessage().size() > 0) {
+        RCLCPP_ERROR(get_logger(), "Error parsing IR: %s", Err.getMessage().str().c_str());
+        return;
+    }
+
+    cantFail(JIT.addIRModule(ThreadSafeModule(std::move(M), std::move(Context))));
+}
+
+void testDL() {
     struct DLFuncData {
         std::string fName;
         std::string lib;
@@ -161,7 +173,7 @@ void LLVMJITNode::testDL() {
     }
 }
 
-void LLVMJITNode::testJIT() {
+void testJIT() {
     const char *p_c_ir = R"(
         declare double @p_controller(double, double)
 
@@ -287,6 +299,7 @@ void LLVMJITNode::testJIT() {
 
     RCLCPP_INFO(get_logger(), "JIT function %s output: %f", jit_func.fName.c_str(), result);
 }
+};
 
 
 int main(int argc, char *argv[]) {
