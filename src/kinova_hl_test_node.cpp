@@ -1,7 +1,3 @@
-#include <chrono>
-#include <memory>
-#include <string>
-#include <vector>
 #include <signal.h>
 #include <assert.h>
 #include <time.h>
@@ -9,22 +5,7 @@
 
 #include <rclcpp/rclcpp.hpp>
 
-#include <ament_index_cpp/get_package_share_directory.hpp>
-
-#include <kdl_parser/kdl_parser.hpp>
-
-#include "kdl/chain.hpp"
-#include "kdl/frames.hpp"
-#include "kdl/kinfam_io.hpp"
-#include "kdl/frames_io.hpp"
-#include "kdl/jntarray.hpp"
-#include "kdl/chainfksolverpos_recursive.hpp"
-#include "kdl/chainidsolver_recursive_newton_euler.hpp"
-
 #include "robif2b/functions/kinova_gen3.h"
-
-#include <llvm/ExecutionEngine/Orc/Mangling.h>
-#include <llvm/ExecutionEngine/Orc/SymbolStringPool.h>
 
 
 #define LOG_INFO(node, msg, ...) RCLCPP_INFO(node->get_logger(), msg, ##__VA_ARGS__)
@@ -34,9 +15,6 @@
 
 
 volatile sig_atomic_t stop_signal_received = 0;
-
-using namespace llvm;
-using namespace llvm::orc;
 
 void handle_stop_signal(int signal) {
     stop_signal_received = 1;
@@ -61,26 +39,24 @@ int main(int argc, char **argv) {
 
     rclcpp::init(argc, argv);
     auto node = rclcpp::Node::make_shared("kinova_test_node");
-    
-    auto urdf = "gen3_robotiq_2f_85.urdf";
-    auto pkg_path = ament_index_cpp::get_package_share_directory("jit_control_arch");
-    auto urdf_path = pkg_path + "/urdf/" + urdf;
 
     bool success = false;
     double cycle_time = 0.001;
-    enum robif2b_ctrl_mode ctrl_mode = ROBIF2B_CTRL_MODE_FORCE;
+    
+    enum robif2b_hl_ctrl_mode ctrl_mode = ROBIF2B_HL_CTRL_MODE_WRENCH;
+    enum robif2b_kinova_cart_ref_frame ref_frame = ROBIF2B_KINOVA_CART_REF_FRAME_TOOL;
+    enum robif2b_kinova_cart_wrench_mode wrench_mode = ROBIF2B_KINOVA_CART_WRENCH_MODE_NORMAL;
     double pos_msr[] = { 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0 };
     double vel_msr[] = { 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0 };
     double eff_msr[] = { 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0 };
     double cur_msr[] = { 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0 };
-    double pos_cmd[] = { 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0 };
-    double vel_cmd[] = { 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0 };
-    double eff_cmd[] = { 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0 };
-    double cur_cmd[] = { 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0 };
     double imu_ang_vel_msr[] = { 0.0, 0.0, 0.0 };
     double imu_lin_acc_msr[] = { 0.0, 0.0, 0.0 };
+    double tool_ext_wrench_msr[] = { 0.0, 0.0, 0.0, 0.0, 0.0, 0.0 }; 
 
-    struct robif2b_kinova_gen3_nbx rob = {
+    double wrench_cmd[] = { 0.0, 0.0, 5.0, 0.0, 0.0, 0.0 };
+   
+    struct robif2b_kinova_gen3_hl_nbx rob = {
         // Configuration
         .conf = {
             .ip_address         = "192.168.1.10",
@@ -93,79 +69,97 @@ int main(int argc, char **argv) {
         },
 
         // Connections
-        .cycle_time      = &cycle_time,
-        .ctrl_mode       = &ctrl_mode,
-        .jnt_pos_msr     = pos_msr,
-        .jnt_vel_msr     = vel_msr,
-        .jnt_trq_msr     = eff_msr,
-        .act_cur_msr     = cur_msr,
-        .jnt_pos_cmd     = pos_cmd,
-        .jnt_vel_cmd     = vel_cmd,
-        .jnt_trq_cmd     = eff_cmd,
-        .act_cur_cmd     = cur_cmd,
-        .imu_ang_vel_msr = imu_ang_vel_msr,
-        .imu_lin_acc_msr = imu_lin_acc_msr,
-        .success         = &success
+        .ctrl_mode           = &ctrl_mode,
+        .reference_frame     = &ref_frame,
+        .wrench_mode         = &wrench_mode,
+        .jnt_pos_msr         = pos_msr,
+        .jnt_vel_msr         = vel_msr,
+        .jnt_trq_msr         = eff_msr,
+        .act_cur_msr         = cur_msr,
+        .imu_ang_vel_msr     = imu_ang_vel_msr,
+        .imu_lin_acc_msr     = imu_lin_acc_msr,
+        .tool_ext_wrench_msr = tool_ext_wrench_msr,
+        .twist_cmd           = NULL,
+        .wrench_cmd          = wrench_cmd,
+        .success             = &success
     };
 
     struct CycleTimeState cycle_time_state = {
         .cycle_time_exp = 1000 // [us]
     };
 
-    robif2b_kinova_gen3_configure(&rob);
+    robif2b_kinova_gen3_hl_configure(&rob);
     if (!success) {
         LOG_ERROR(node, "Failed to configure Kinova Gen3 robot.");
         return -1;
     }
 
-    robif2b_kinova_gen3_recover(&rob);
+    robif2b_kinova_gen3_hl_recover(&rob);
     if (!success) {
         LOG_ERROR(node, "Failed to recover Kinova Gen3 robot.");
         return -1;
     }
 
     LOG_INFO(node, "Starting Kinova Gen3 robot control loop.");
-    robif2b_kinova_gen3_start(&rob);
+    robif2b_kinova_gen3_hl_start(&rob);
     if (!success) {
         LOG_ERROR(node, "Failed to start Kinova Gen3 robot.");
         return -1;
     }
-
+    
+    bool wrench_bias_initialized = false;
+    const int buffer_size = 20;
+    double wrench_msr_bias[6] = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
+    
+    int lc = 0;
     while (rclcpp::ok() && !stop_signal_received) {
         clock_gettime(CLOCK_MONOTONIC, &cycle_time_state.cycle_start);
 
-        robif2b_kinova_gen3_update(&rob);
+        // add wrench measurement to buffer
+        if (!wrench_bias_initialized) {
+            for (int i = 0; i < 6; i++) {
+                wrench_msr_bias[i] += tool_ext_wrench_msr[i];
+            }
+            lc++;
+
+            if (lc >= buffer_size) {
+                for (int i = 0; i < 6; i++) wrench_msr_bias[i] /= buffer_size;
+
+                wrench_bias_initialized = true;
+                LOG_INFO(node, "Wrench bias initialized: [%f, %f, %f, %f, %f, %f]",
+                         wrench_msr_bias[0], wrench_msr_bias[1], wrench_msr_bias[2],
+                         wrench_msr_bias[3], wrench_msr_bias[4], wrench_msr_bias[5]);
+            }
+        } else {
+            // apply bias correction
+            for (int i = 0; i < 6; i++) {
+                tool_ext_wrench_msr[i] -= wrench_msr_bias[i];
+            }
+        }
+
+        // ---- update robot ----
+        robif2b_kinova_gen3_hl_update(&rob);
         if (!success) {
             LOG_ERROR(node, "Failed to update Kinova Gen3 robot.");
             break;
         }
-        
-        // print measured joint positions
-        // std::string pos_str = "q: ";
-        // for (int i = 0; i < NUM_JOINTS; i++) {
-        //     pos_str += std::to_string(pos_msr[i]) + " ";
-        // }
-        // LOG_INFO(node, pos_str.c_str());
-        
-        // std::string tau_str = "tau: ";
-        // for (int i = 0; i < NUM_JOINTS; i++) {
-        //     tau_str += std::to_string(rob.jnt_trq_cmd[i]) + " ";
-        // }
-        // LOG_INFO(node, tau_str.c_str());
 
         clock_gettime(CLOCK_MONOTONIC, &cycle_time_state.cycle_end);
         cycle_time_state.cycle_time_msr = timespec_to_usec(&cycle_time_state.cycle_end)
                                   - timespec_to_usec(&cycle_time_state.cycle_start);
 
         // threshold for cycle time to be >= 0
-        if (cycle_time_state.cycle_time_msr < cycle_time_state.cycle_time_exp)
+        printf("Cycle Time (in Hz): %f\n", 1.0e6 / cycle_time_state.cycle_time_msr);
+        if (cycle_time_state.cycle_time_msr < cycle_time_state.cycle_time_exp) {
             usleep(cycle_time_state.cycle_time_exp - cycle_time_state.cycle_time_msr);
+        }
     }
 
-    robif2b_kinova_gen3_stop(&rob);
+    LOG_INFO(node, "Stopping Kinova Gen3 robot control.");
+    robif2b_kinova_gen3_hl_stop(&rob);
     LOG_INFO(node, "Kinova Gen3 robot control loop stopped.");
 
-    robif2b_kinova_gen3_shutdown(&rob);
+    robif2b_kinova_gen3_hl_shutdown(&rob);
     LOG_INFO(node, "Kinova Gen3 robot shutdown completed.");
 
     rclcpp::shutdown();

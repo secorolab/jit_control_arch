@@ -68,6 +68,31 @@ target_link_libraries(kinova_test_node
   robif2b::kinova_gen3
 )
 
+# install kinova hl test node
+add_executable(kinova_hl_test_node src/kinova_hl_test_node.cpp)
+target_include_directories(kinova_hl_test_node PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include/${PROJECT_NAME}>)
+target_compile_features(kinova_hl_test_node PUBLIC c_std_99 cxx_std_20)
+ament_target_dependencies(kinova_hl_test_node rclcpp kdl_parser orocos_kdl ament_index_cpp)
+target_link_libraries(kinova_hl_test_node
+  ${llvm_libs}
+  robif2b::kinova_gen3
+)
+
+# crf-screwing-hl
+add_executable(crf_screwing_hl_node src/crf_screwing_hl_node.cpp)
+target_include_directories(crf_screwing_hl_node PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include/${PROJECT_NAME}>)
+target_compile_features(crf_screwing_hl_node PUBLIC c_std_99 cxx_std_20)
+ament_target_dependencies(crf_screwing_hl_node rclcpp kdl_parser orocos_kdl ament_index_cpp)
+target_link_libraries(crf_screwing_hl_node
+  controllers
+  ${llvm_libs}
+  robif2b::kinova_gen3
+)
+
 install(
   DIRECTORY urdf/
   DESTINATION share/${PROJECT_NAME}/urdf
@@ -82,7 +107,7 @@ install(TARGETS controllers
   INCLUDES DESTINATION include/${PROJECT_NAME}
 )
 
-install(TARGETS jit_test_node kinova_test_node
+install(TARGETS jit_test_node kinova_test_node kinova_hl_test_node crf_screwing_hl_node
   DESTINATION lib/${PROJECT_NAME}
 )
 
