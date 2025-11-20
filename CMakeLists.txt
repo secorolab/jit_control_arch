@@ -21,6 +21,8 @@ find_package(robif2b REQUIRED)
 # ros2 dependencies
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
+find_package(std_msgs REQUIRED)
+
 find_package(orocos_kdl REQUIRED)
 find_package(kdl_parser REQUIRED)
 find_package(orocos_kdl REQUIRED)
@@ -86,7 +88,7 @@ target_include_directories(crf_screwing_hl_node PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include/${PROJECT_NAME}>)
 target_compile_features(crf_screwing_hl_node PUBLIC c_std_99 cxx_std_20)
-ament_target_dependencies(crf_screwing_hl_node rclcpp kdl_parser orocos_kdl ament_index_cpp)
+ament_target_dependencies(crf_screwing_hl_node rclcpp kdl_parser orocos_kdl ament_index_cpp std_msgs)
 target_link_libraries(crf_screwing_hl_node
   controllers
   ${llvm_libs}

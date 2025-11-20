@@ -1,3 +1,4 @@
+#include <robif2b/types/kinova_gen3.h>
 #include <signal.h>
 #include <assert.h>
 #include <time.h>
@@ -44,7 +45,7 @@ int main(int argc, char **argv) {
     double cycle_time = 0.001;
     
     enum robif2b_hl_ctrl_mode ctrl_mode = ROBIF2B_HL_CTRL_MODE_WRENCH;
-    enum robif2b_kinova_cart_ref_frame ref_frame = ROBIF2B_KINOVA_CART_REF_FRAME_TOOL;
+    enum robif2b_kinova_cart_ref_frame ref_frame = ROBIF2B_KINOVA_CART_REF_FRAME_MIXED;
     enum robif2b_kinova_cart_wrench_mode wrench_mode = ROBIF2B_KINOVA_CART_WRENCH_MODE_NORMAL;
     double pos_msr[] = { 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0 };
     double vel_msr[] = { 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0 };
@@ -54,7 +55,7 @@ int main(int argc, char **argv) {
     double imu_lin_acc_msr[] = { 0.0, 0.0, 0.0 };
     double tool_ext_wrench_msr[] = { 0.0, 0.0, 0.0, 0.0, 0.0, 0.0 }; 
 
-    double wrench_cmd[] = { 0.0, 0.0, 5.0, 0.0, 0.0, 0.0 };
+    double wrench_cmd[] = { 0.0, 0.0, 0.0, 0.0, 0.0, 10.0 };
    
     struct robif2b_kinova_gen3_hl_nbx rob = {
         // Configuration
@@ -106,53 +107,28 @@ int main(int argc, char **argv) {
         LOG_ERROR(node, "Failed to start Kinova Gen3 robot.");
         return -1;
     }
+
+    robif2b_kinova_gen3_hl_update(&rob);
+
     
-    bool wrench_bias_initialized = false;
-    const int buffer_size = 20;
-    double wrench_msr_bias[6] = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
-    
-    int lc = 0;
     while (rclcpp::ok() && !stop_signal_received) {
-        clock_gettime(CLOCK_MONOTONIC, &cycle_time_state.cycle_start);
-
-        // add wrench measurement to buffer
-        if (!wrench_bias_initialized) {
-            for (int i = 0; i < 6; i++) {
-                wrench_msr_bias[i] += tool_ext_wrench_msr[i];
-            }
-            lc++;
-
-            if (lc >= buffer_size) {
-                for (int i = 0; i < 6; i++) wrench_msr_bias[i] /= buffer_size;
-
-                wrench_bias_initialized = true;
-                LOG_INFO(node, "Wrench bias initialized: [%f, %f, %f, %f, %f, %f]",
-                         wrench_msr_bias[0], wrench_msr_bias[1], wrench_msr_bias[2],
-                         wrench_msr_bias[3], wrench_msr_bias[4], wrench_msr_bias[5]);
-            }
-        } else {
-            // apply bias correction
-            for (int i = 0; i < 6; i++) {
-                tool_ext_wrench_msr[i] -= wrench_msr_bias[i];
-            }
-        }
+        // clock_gettime(CLOCK_MONOTONIC, &cycle_time_state.cycle_start);
 
         // ---- update robot ----
-        robif2b_kinova_gen3_hl_update(&rob);
-        if (!success) {
-            LOG_ERROR(node, "Failed to update Kinova Gen3 robot.");
-            break;
-        }
+        // robif2b_kinova_gen3_hl_update(&rob);
+        // if (!success) {
+        //     LOG_ERROR(node, "Failed to update Kinova Gen3 robot.");
+        //     break;
+        // }
 
-        clock_gettime(CLOCK_MONOTONIC, &cycle_time_state.cycle_end);
-        cycle_time_state.cycle_time_msr = timespec_to_usec(&cycle_time_state.cycle_end)
-                                  - timespec_to_usec(&cycle_time_state.cycle_start);
+        // clock_gettime(CLOCK_MONOTONIC, &cycle_time_state.cycle_end);
+        // cycle_time_state.cycle_time_msr = timespec_to_usec(&cycle_time_state.cycle_end)
+        //                           - timespec_to_usec(&cycle_time_state.cycle_start);
 
         // threshold for cycle time to be >= 0
-        printf("Cycle Time (in Hz): %f\n", 1.0e6 / cycle_time_state.cycle_time_msr);
-        if (cycle_time_state.cycle_time_msr < cycle_time_state.cycle_time_exp) {
-            usleep(cycle_time_state.cycle_time_exp - cycle_time_state.cycle_time_msr);
-        }
+        // if (cycle_time_state.cycle_time_msr < cycle_time_state.cycle_time_exp) {
+        //     usleep(cycle_time_state.cycle_time_exp - cycle_time_state.cycle_time_msr);
+        // }
     }
 
     LOG_INFO(node, "Stopping Kinova Gen3 robot control.");
